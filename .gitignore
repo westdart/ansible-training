@@ -5,3 +5,4 @@ __pycache__
 **/.project
 **/.pydevproject
 **/.*.swp
+ansible/generated/aws-ansible-training-environment/.terraform
