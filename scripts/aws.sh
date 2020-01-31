@@ -76,7 +76,10 @@ function validateInventoryDir() {
 
 function activateVirtualEnv() {
     declare venv="${HOME}/python-virtual-envs/${VIRTUAL_ENV}/bin/activate"
-    [[ ! -f "${venv}" ]] || {
+    log_info "HOME=${HOME}"
+    log_info "venv=${venv}"
+
+    [[ -f "${venv}" ]] || {
         log_error "The virtual environment ${VIRTUAL_ENV} (${venv}) cannot be activated."
         return 1
     }
