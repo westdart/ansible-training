@@ -1,0 +1,35 @@
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    - debug:
+        msg: "Entering start.yml"
+
+    - name: Establish targets
+      include_tasks: "../tasks/aws-establish-targets.yml"
+
+    - name: start the target instances
+      ec2:
+        instance_ids: "{{ item.instance_id  }}"
+        state: running
+        region: "{{ infra_region }}"
+      with_items: "{{ targets }}"
+
+    - name: Wait for machines to be attachable
+      shell: "aws ec2 describe-instance-status --instance-ids {{ target_instance_ids | join(' ') }}"
+      register: attachable_machines_result
+      until: (attachable_machines_result.stdout | from_json | json_query("InstanceStatuses[?SystemStatus.Status=='ok'].InstanceId") | length) == (target_instance_ids | length)
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - debug:
+        verbosity: 1
+        msg: "{{ attachable_machines_result.stdout | from_json }}"
+
+    - debug:
+        verbosity: 1
+        msg: "{{ attachable_machines_result.stdout | from_json | json_query(\"InstanceStatuses[?SystemStatus.Status!='ok'].InstanceId\") }}"
+
+- name: "Generate hosts file"
+  import_playbook: gen-hosts.yml

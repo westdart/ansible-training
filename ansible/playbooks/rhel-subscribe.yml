@@ -1,0 +1,20 @@
+---
+- hosts: "{{ target | default('all') }}"
+  become: yes
+
+  vars_files:
+    - "{{ vault }}"
+
+  tasks:
+    - debug:
+        msg: "Entering rhel-subscribe.yml"
+
+    - name: test vault
+      debug:
+        msg: "Username = {{ subscription_manager_username }}"
+
+    - name: Register subscription
+      command: "subscription-manager register --username={{ subscription_manager_username }} --password={{ subscription_manager_password }}"
+      changed_when: false
+      register: subscribe_result
+      failed_when: "subscribe_result.rc != 0 and subscribe_result.rc != 64"

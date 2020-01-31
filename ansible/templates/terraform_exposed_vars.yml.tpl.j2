@@ -1,0 +1,22 @@
+# Expose terraform variables in the form Ansible can digest
+terraform_vars: {
+{% for env in envs %}
+  '{{ env['prefix'] }}': {
+{% for node_group in env['node_groups'] %}
+    {{ node_group['name'] }}_hosts: [
+%{ for entry in split(",", {{ env['prefix'] }}_{{ node_group['name'] }}_addresses) }
+      ${entry},
+%{ endfor }
+    ]{{ ',' if not loop.last else '' }} {# TODO - fix if external_ips exist there is no comma #}
+
+{% if 'external_ip' in machine_types[node_group['machine_type']] and machine_types[node_group['machine_type']]['external_ip'] == 'true' %}
+    {{ node_group['name'] }}_eips: [
+%{ for entry in split(",", {{ env['prefix'] }}_{{ node_group['name'] }}_eips) }
+      ${entry},
+%{ endfor }
+    ]
+{% endif %}
+{% endfor %}
+  }{{ ',' if not loop.last else '' }}
+{% endfor %}
+}

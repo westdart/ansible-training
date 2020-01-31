@@ -1,0 +1,74 @@
+{% macro define_instance(machine_num, node_group, root_bock_device_obj, common_security_groups, security_groups, root_bock_device_obj) -%}
+{% if node_group['count'] == 1 %}
+{%   set dns_name = env['prefix'] + '-' + node_group['name'] + '.' + infra_domain %}
+{% else %}
+{%   set dns_name = env['prefix'] + '-' + node_group['name'] + machine_num + '.' + infra_domain %}
+{% endif %}
+resource "aws_instance" "instance_{{ machine_num }}" {
+  ami                    = module.{{ machine_types[node_group['machine_type']]['image'] }}-images.ami_id
+  instance_type          = "{{ machine_types[node_group['machine_type']]['type'] }}"
+  iam_instance_profile   = module.aws-iam.sts-instance-profile-id
+  subnet_id              = aws_subnet.{{ env['prefix'] }}_public_subnet.id
+  vpc_security_group_ids = [{{ common_security_groups | join(',') }},
+                            {% for security_group in security_groups|json_query("[?env=='" + env['prefix'] +"']") %}{% if security_group['env'] == env['prefix'] %}aws_security_group.{{ security_group['name'] }}.id{% endif %}{% if not loop.last %},
+                            {% endif %}{% endfor %}]
+  key_name               = "{{ infra_name }}-sshkey"
+
+  root_block_device {
+    volume_size = {{ root_bock_device_obj['size'] }}
+    volume_type = "{{ root_bock_device_obj['type'] }}"
+  }
+
+{% if node_group['machine_type'] in machine_types and machine_types[node_group['machine_type']]['block_devices'] | length > 0 %}
+  dynamic "ebs_block_device" {
+    for_each = [
+{% for block_device in machine_types[node_group['machine_type']]['block_devices'] %}
+      {
+        device_name = "{{ block_device['device'] }}"
+        volume_size = {{ block_device['size'] }}
+        volume_type = "{{ block_device['type'] }}"
+      }{{ ',' if not loop.last else '' }}
+{% endfor %}
+    ]
+    content {
+      device_name = ebs_block_device.value.device_name
+      volume_size = ebs_block_device.value.volume_size
+      volume_type = ebs_block_device.value.volume_type
+    }
+  }
+{% endif %}
+
+  tags = merge(
+    var.common-tags,
+    map(
+      "Name", "{{ dns_name }}"
+    )
+  )
+}
+
+{% if use_aws_dns %}
+resource "aws_route53_record" "a-record" {
+  zone_id = module.aws-dns.zone-id
+  name    = {{ dns_name }}
+  type    = "A"
+  ttl     = 300
+  records = [
+      aws_instance.instance_{{ machine_num }}.private_ip
+  ]
+}
+{% endif %}
+
+{% if 'external_ip' in machine_types[node_group['machine_type']] %}
+// Get elastic IP for server if required.
+resource "aws_eip" "instance_eip" {
+  instance = aws_instance.instance_{{ machine_num }}.id
+  vpc      = true
+  tags = merge(machine_num
+    var.common-tags,
+    map(
+      "Name", "{{ dns_name }}"
+    )
+  )
+}
+{% endif %}
+{%- endmacro %}

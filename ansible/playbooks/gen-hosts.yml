@@ -1,0 +1,139 @@
+---
+#
+# Generate host files, specifically /etc/hosts and add ssh keys to known_hosts
+#
+# NOTE: Only machines that are running are entered into the hosts file
+# NOTE: Only machines with an 'initials' tag are ssh-key scanned.
+#
+
+- hosts: localhost
+  become: no
+
+  vars:
+    target_mode: 'all'
+
+  tasks:
+    - debug:
+        msg: "Entering gen-hosts.yml"
+
+    - assert: { that: "'{{ target_mode }}' == 'all' or '{{ target_mode }}' == 'targeted'" }
+
+    - name: Establish targets
+      include_tasks: "../tasks/aws-establish-targets.yml"
+      when: target_mode == 'targeted'
+
+    - set_fact:
+        _ec2_instance_facts: "{{ target_ec2_instance_facts }}"
+      when: target_mode == 'targeted'
+
+    - ec2_instance_facts:
+        filters:
+          instance-state-name: [ "running" ]
+      register: ec2_instance_facts
+      when: target_mode == 'all'
+
+    - set_fact:
+        _ec2_instance_facts: "{{ ec2_instance_facts }}"
+      when: target_mode == 'all'
+
+    - set_fact:
+        host_entries: "{{ _ec2_instance_facts | json_query('instances[*].[public_ip_address, tags.Name, private_dns_name]') }}"
+
+    - set_fact:
+        known_host_entries: "{{ _ec2_instance_facts | json_query(query) | flatten(levels=1) }}"
+      vars:
+        query: "instances[*].{initials: tags.initials, Name: tags.Name}"
+
+    - name: "Generate hosts file"
+      template:
+        src:  ../templates/hosts.j2
+        dest: /etc/hosts
+        owner: root
+        group: root
+        mode: '0644'
+      become: yes
+
+    - name: "Get new ssh-key entries"
+      shell: "ssh-keyscan -t rsa {{item.Name}}"
+      when: item.initials != None
+      with_items: "{{ known_host_entries | flatten }}"
+      register: ssh_keys_out
+      changed_when: false
+
+    - set_fact:
+        ssh_key_entries: "{{ ssh_keys_out | json_query('results[*].stdout') }}"
+
+    - name: Ensure known_hosts exits
+      file:
+        path: "{{ ansible_env.HOME }}/.ssh/known_hosts"
+        mode: 0600
+        state: touch
+      changed_when: false
+
+    - name: "Update known_hosts (gen-hosts)"
+      lineinfile:
+        path: "{{ ansible_env.HOME }}/.ssh/known_hosts"
+        regexp: "^{{ item.split()[0] }}"
+        line: "{{ item }}"
+      with_items: "{{ ssh_key_entries }}"
+
+    - set_fact:
+        _dnsmasq_present: "{{ dnsmasq_present | default(false) }}"
+
+    - set_fact:
+        infra_node: "{{ host_entries | select_from_array_of_arrays('-infra1\\.') }}"
+
+    - set_fact:
+        master_node: "{{ host_entries | select_from_array_of_arrays('-master\\.') }}"
+
+    - name: "Update dnsmasq"
+      lineinfile:
+        path: "/etc/dnsmasq.conf"
+        regexp: "^address=/.{{ item[1].split('-')[0] | lower }}.{{ wildcard_dns_domain }}/.*$"
+        line: address=/.{{ item[1].split('-')[0] | lower }}.{{ wildcard_dns_domain }}/{{ item[0] }}
+      when: _dnsmasq_present and infra_node | length > 0
+      with_items: "{{ [infra_node] }}"
+      become: yes
+      notify:
+        - restart dnsmasq
+
+    - name: "Update dnsmasq"
+      lineinfile:
+        path: "/etc/dnsmasq.conf"
+        regexp: "^address=/.{{ item[1].split('-')[0] | lower }}.{{ wildcard_dns_domain }}/.*$"
+        line: address=/.{{ item[1].split('-')[0] | lower }}.{{ wildcard_dns_domain }}/{{ item[0] }}
+      when: _dnsmasq_present and infra_node | length == 0
+      with_items: "{{ [master_node] }}"
+      become: yes
+      notify:
+        - restart dnsmasq
+
+    - name: "Get current nameserver"
+      shell: grep nameserver /etc/resolv.conf | head -n1 | awk '{print $NF}'
+      register: nameserver_out
+      changed_when: false
+
+    - name: "Update dnsmasq forward"
+      lineinfile:
+        path: "/etc/dnsmasq.conf"
+        regexp: "^server=.*$"
+        line: "server={{ nameserver_out.stdout }}"
+      when: (dnsmasq_present | default(false)) and (nameserver_out.stdout != '127.0.0.1')
+      become: yes
+      notify:
+        - restart dnsmasq
+
+    - name: "Update resolv.conf"
+      lineinfile:
+        path: "/etc/resolv.conf"
+        regexp: "^nameserver {{ nameserver_out.stdout }}$"
+        line: "nameserver 127.0.0.1"
+      when: (dnsmasq_present | default(false)) and (nameserver_out.stdout != '127.0.0.1')
+      become: yes
+
+  handlers:
+    - name: restart dnsmasq
+      service:
+        name: dnsmasq
+        state: restarted
+      become: yes

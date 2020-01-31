@@ -1,0 +1,55 @@
+---
+- hosts: localhost
+  become: no
+
+  vars_files:
+    - "{{ env_spec }}"
+
+  tasks:
+    - debug:
+        msg: "Entering build-infra.yml"
+
+    - name: "Create global ssh key pair"
+      openssh_keypair:
+        path: "{{ key_path }}"
+        size: 2048
+
+    - name: "copy private key file to {{ dest_dir }}"
+      copy:
+        src: "{{ key_path }}"
+        dest: "{{ dest_dir }}/openshift-id_ssh_rsa"
+        mode: '0600'
+
+    - name: "copy public key file to {{ dest_dir }}"
+      copy:
+        src: "{{ key_path }}.pub"
+        dest: "{{ dest_dir }}/openshift-id_ssh_rsa.pub"
+        mode: '0600'
+
+    - terraform:
+        project_path: "{{ dest_dir }}"
+        state: "present"
+        force_init: true
+        variables:
+          ssh-public-key-file: "{{ key_path }}.pub"
+      register: tf_out
+
+    - name: Output terraform outputs to a file
+      copy:
+        dest: "{{ dest_dir }}/tf_out.json"
+        content: "{{ tf_out }}"
+
+    - name: Debug terraform out
+      debug: var=tf_out verbosity=2
+
+    - name: Terraform stderr
+      debug:
+        msg: "{{ tf_out.stderr }}"
+      when: tf_out.failed != 'false'
+
+    - name: Terraform stdout
+      debug:
+        msg: "{{ tf_out.stdout }}"
+
+- import_playbook: genterra-secrets.yml
+

@@ -1,0 +1,21 @@
+---
+- hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - debug:
+        msg: "Entering stop.yml"
+
+    - name: Establish targets
+      include_tasks: "../tasks/aws-establish-targets.yml"
+
+    - name: stop the target instances
+      ec2:
+        instance_ids: "{{ item.instance_id  }}"
+        state: stopped
+        region: "{{ infra_region }}"
+      with_items: "{{ targets }}"
+
+    - name: Wait for machines to be stopped
+      shell: "aws ec2 wait instance-stopped --instance-ids {{ target_instance_ids | join(' ') }}"
+      changed_when: false

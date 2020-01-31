@@ -1,0 +1,64 @@
+env_spec: ../varfiles/aws-ansible-training-environment.yml
+dest_dir: ../generated/aws-ansible-training-environment
+
+terraform_roles_dir: ../../../../../automation-incubator/terraform
+terraform_template: aws-infra-main.tf.j2
+terraform_variables: aws-infra-variables.tf.j2
+terraform_outputs: aws-infra-outputs.tf.j2
+terraform_out_vars:  terraform_exposed_vars.yml.tpl.j2
+
+key_path: "{{ ansible_env.HOME }}/.ssh/ansible-training-id_rsa"
+
+infra_cloudprovider_kind: 'aws'
+infra_name: 'ansible-training-1'
+infra_description: 'Ansible Training Env'
+infra_domain: 'at.local'
+infra_region: 'eu-west-2'
+use_aws_dns: false
+
+cloud_cidr: "10.0.0.0/16"
+
+images: [
+  { name: 'rhel_7_7', filter: 'RHEL-7.7*', account: '309956199498' },
+  { name: 'centos_7', filter: 'CentOS7*', account: '679593333241' }
+]
+
+root_block_device: {
+  size: "20",
+  type: "gp2"
+}
+
+machine_types: {
+  training_node: {
+    type: "t2.micro",
+    block_devices: [
+      { device: "/dev/sdf", size: "5", type: "gp2" }
+    ],
+    image: 'rhel_7_7',
+    external_ip: false
+  },
+  nfs_node: {
+    type: "t2.micro",
+    block_devices: [
+      { device: "/dev/sdf", size: "20", type: "gp2" }
+    ],
+    image: 'rhel_7_7'
+  }
+}
+
+envs: [
+  { prefix: 't1', subnet_cidr: "10.0.1.0/24", availability_zone: '{{ infra_region }}a',
+    subnet_name: 't1-default-public-subnet', name: "Ansible Training 1 env",
+    node_groups: [
+      { name: 'tnode', machine_type: 'training_node', count: 3 }
+    ]
+  }
+]
+
+network_rules: [
+  { name: 'internal_traffic', description: 'Open network within env', ingres_rules: [{}], egres_rules: [{}] }
+]
+
+security_groups: [
+  { env: 't1', name: 't1_security_group', description: 'Network rules for t1 env', network_rule_refs: ['internal_traffic'] }
+]
