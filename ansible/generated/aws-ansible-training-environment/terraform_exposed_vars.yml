@@ -1,0 +1,10 @@
+# Expose terraform variables in the form Ansible can digest
+terraform_vars: {
+  't1': {
+    tnode_hosts: [
+
+      'ip-10-0-1-116.eu-west-2.compute.internal',
+
+    ] 
+  }
+}

@@ -1,0 +1,12 @@
+infra_name: ansible-training-1
+infra_description: 'Ansible Training Env'
+infra_domain: 'at.local'
+infra_region: eu-west-2
+vpc_name: 'ansible-training-1'
+
+env_spec: /home/davids/code/westdart/ansible-training/ansible/varfiles/aws-ansible-training-environment.yml
+
+aws_mtype_disk_map: {
+  "m5.xlarge":  "nvme2n1",
+  "m5.2xlarge": "nvme2n1"
+}
