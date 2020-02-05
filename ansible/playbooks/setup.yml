@@ -1,8 +1,8 @@
 ---
-#- import_playbook: genterra-main.yml
-#- import_playbook: build-infra.yml
-#- import_playbook: genterra-secrets.yml
-#- import_playbook: gen-ansible-inventory.yml
-#- import_playbook: gen-hosts.yml
+- import_playbook: genterra-main.yml
+- import_playbook: build-infra.yml
+- import_playbook: genterra-secrets.yml
+- import_playbook: gen-ansible-inventory.yml
+- import_playbook: gen-hosts.yml
 
 - import_playbook: rhel-subscribe.yml
