@@ -205,6 +205,39 @@ function merge() {
     echo "$source"
 }
 
+function setSecretPassphrase()
+{
+    if [ -z "${SECRET_PASSPHRASE+x}" ]
+    then
+        if [ ! -e $SECRET_FILE ]
+        then
+            SECRET_PASSPHRASE=$(getConfirmedPassword "Enter encryption passphrase") || { log_error "Could not obtain passphrase"; return 1; }
+        else
+            SECRET_PASSPHRASE=$(getPassword "Enter encryption passphrase") || { log_error "Could not obtain passphrase"; return 1; }
+        fi
+    fi
+
+    if [ -e $SECRET_FILE ]
+    then
+        getSecretFileContent &> /dev/null || { log_error "Passphrase provided does not decrypt secret file ($SECRET_FILE). To use another secret file set the 'SECRET_FILE' environment variable"; return 1; }
+    fi
+    export SECRET_PASSPHRASE
+}
+
+function getSecretFileContent()
+{
+    local content=
+    content=$(cat "$SECRET_FILE" | openssl enc -d -aes-256-cbc -a -salt -pass pass:${SECRET_PASSPHRASE} 2>/dev/null)
+    if [ $? != 0 ]
+    then
+        log_error "Failed to decrypt the secret file"
+        unset SECRET_PASSPHRASE
+        SECRET_PASSPHRASE=
+        return 1
+    fi
+    echo "$content"
+}
+
 function storeSecret()
 {
     local name=
@@ -233,7 +266,7 @@ function storeSecret()
 
     if [ -e $SECRET_FILE ]
     then
-        content=$(cat "$SECRET_FILE" | openssl enc -d -aes-256-cbc -a -salt -pass pass:${SECRET_PASSPHRASE} 2>/dev/null) || { log_error "Could not decrypt current secret file with passphrase"; return 1; }
+        content=$(getSecretFileContent) || return 1
         cp $SECRET_FILE ${SECRET_FILE_BKUP}
     fi
     newContent=$(setRawProperty "$content" $name $secret) || { log_info "Secret already present"; return 0; }
@@ -265,19 +298,8 @@ function getSecret()
 
     if [[ -f $SECRET_FILE ]]
     then
-        if [ -z "${SECRET_PASSPHRASE+x}" ]
-        then
-            SECRET_PASSPHRASE=$(getPassword "Enter encryption passphrase") || { log_error "Could not obtain passphrase"; return 1; }
-            export SECRET_PASSPHRASE
-        fi
-        content=$(cat "$SECRET_FILE" | openssl enc -d -aes-256-cbc -a -salt -pass pass:${SECRET_PASSPHRASE} 2>/dev/null)
-        if [ $? != 0 ]
-        then
-            log_error "Failed to decrypt the secret file"
-            unset SECRET_PASSPHRASE
-            SECRET_PASSPHRASE=
-            return 1
-        fi
+        setSecretPassphrase || return 1
+        content=$(getSecretFileContent) || return 1
 
         result=$(getRawProperty "$content" $name)
         if [ -z "$result" ]
@@ -313,17 +335,8 @@ function showSecrets()
     then
         log_error "No secret file found at $SECRET_FILE"
     else
-        if [ -z "${SECRET_PASSPHRASE+x}" ]
-        then
-            SECRET_PASSPHRASE=$(getPassword "Enter encryption passphrase") || { log_error "Could not obtain passphrase"; return 1; }
-        fi
-        content=$(cat "$SECRET_FILE" | openssl enc -d -aes-256-cbc -a -salt -pass pass:${SECRET_PASSPHRASE} 2>/dev/null)
-        if [ $? != 0 ]
-        then
-            log_error "Failed to decrypt the secret file"
-            SECRET_PASSPHRASE=
-            return 1
-        fi
+        setSecretPassphrase || return 1
+        content=$(getSecretFileContent) || return 1
         export SECRET_PASSPHRASE
         log_always "Secrets:${content}"
     fi

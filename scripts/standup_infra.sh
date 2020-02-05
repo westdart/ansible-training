@@ -37,14 +37,14 @@ source "${DIR}/wrapper.sh"
 source "${DIR}/common-properties.sh"
 
 [[ -z "$VAULT" ]]       && VAULT="~/.vaults/ansible-training.vault"
-[[ -z "$VIRTUAL_ENV" ]] && VIRTUAL_ENV="vaws3"
+[[ -z "$VIRTUAL_ENV" ]] && VIRTUAL_ENV="${HOME}/python-virtual-envs/vaws"
 VAULT_PASSWORD=
 VAULT_PASSWORD_FILE="${DIR}/.vp$$"
 
-function wrapper_initialise()
+function init()
 {
     activateVirtualEnv  || { log_error "Failed to activate virtual env"; return 1; }
-
+    setSecretPassphrase || return 1
     haveSecret vault_password || ${DIR}/aws.sh -f setupSecrets
     haveSecret vault_password || { log_error "Failed to obtain secrets"; return 1; }
 
@@ -61,6 +61,8 @@ function wrapper_initialise()
 
 function executeCommand()
 {
+    init
+
     # Execute an Ansible playbook
     log_debug "ansible-playbook playbooks/${1}.yml $(getAnsibleDebugClause) -i $(getInventoryDir) " \
               "--extra-vars \"env_spec=$(getEnvSpecFile)\"" \
@@ -77,7 +79,7 @@ function executeCommand()
 }
 
 function activateVirtualEnv() {
-    declare venv="${HOME}/python-virtual-envs/${VIRTUAL_ENV}/bin/activate"
+    declare venv="${VIRTUAL_ENV}/bin/activate"
     source "${venv}"
 }
 
@@ -154,6 +156,3 @@ function extractArgs() {
 }
 
 wrapper
-
-declare -i status=$?
-exit ${status}
