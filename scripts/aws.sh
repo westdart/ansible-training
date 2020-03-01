@@ -9,7 +9,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )" || {
     exit 1
 }
 ANSIBLE_DIR="$( cd "${DIR}/../ansible" >/dev/null 2>&1 && pwd )" || {
-    echo "ERROR: gfdg Failed to get ansible directory."
+    echo "ERROR: Failed to get ansible directory."
     exit 1
 }
 
@@ -26,10 +26,10 @@ source "${DIR}/common-properties.sh"
 
 COMMAND=
 [[ -z "$VAULT" ]]       && VAULT="~/.vaults/local.vault"
-[[ -z "$VIRTUAL_ENV" ]] && VIRTUAL_ENV="vaws"
 [[ -z "$ENV_ID" ]]      && ENV_ID="${INITIALS}"
 ENVSPEC=
 EXTRA_VARS=
+VIRTUAL_ENV=
 
 RED='\033[1;31m'
 NC='\033[0m' # No Color
@@ -75,16 +75,19 @@ function validateInventoryDir() {
 }
 
 function activateVirtualEnv() {
-    declare venv="${HOME}/python-virtual-envs/${VIRTUAL_ENV}/bin/activate"
-    log_info "HOME=${HOME}"
-    log_info "venv=${venv}"
+    if [[ ! -z "${VIRTUAL_ENV}" ]]
+    then
+        declare venv="${HOME}/python-virtual-envs/${VIRTUAL_ENV}/bin/activate"
+        log_info "HOME=${HOME}"
+        log_info "venv=${venv}"
 
-    [[ -f "${venv}" ]] || {
-        log_error "The virtual environment ${VIRTUAL_ENV} (${venv}) cannot be activated."
-        return 1
-    }
+        [[ -f "${venv}" ]] || {
+            log_error "The virtual environment ${VIRTUAL_ENV} (${venv}) cannot be activated."
+            return 1
+        }
 
-    source "${venv}"
+        source "${venv}"
+    fi
 }
 
 function overwrite()
@@ -218,11 +221,6 @@ function extractArgs() {
     [[ -z "${ENV_ID}" ]] && {
         log_error "${SCRIPT} requires an initials (-i <initials>) argument."
          return 1
-    }
-
-    [[ -z "${VIRTUAL_ENV}" ]] && {
-        log_error "${SCRIPT} requires a virtual environment (-v <ivirtual_env>) argument."
-        return 1
     }
 
     if  [[ "${COMMAND}" == "start" || "${COMMAND}" == "restart" ]]
