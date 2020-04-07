@@ -24,16 +24,14 @@ images: [
 ]
 
 root_block_device: {
-  size: "20",
+  size: "10",
   type: "gp2"
 }
 
 machine_types: {
   training_node: {
     type: "t2.micro",
-    block_devices: [
-      { device: "/dev/sdf", size: "5", type: "gp2" }
-    ],
+    block_devices: [],
     image: 'rhel_7_7',
     external_ip: false
   },

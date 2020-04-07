@@ -128,24 +128,10 @@ resource "aws_instance" "t1_tnode_instance_1" {
   key_name               = "ansible-training-1-sshkey"
 
   root_block_device {
-    volume_size = 20
+    volume_size = 10
     volume_type = "gp2"
   }
 
-  dynamic "ebs_block_device" {
-    for_each = [
-      {
-        device_name = "/dev/sdf"
-        volume_size = 5
-        volume_type = "gp2"
-      }
-    ]
-    content {
-      device_name = ebs_block_device.value.device_name
-      volume_size = ebs_block_device.value.volume_size
-      volume_type = ebs_block_device.value.volume_type
-    }
-  }
 
   tags = merge(
     local.common_tags,
@@ -166,24 +152,10 @@ resource "aws_instance" "t1_tnode_instance_2" {
   key_name               = "ansible-training-1-sshkey"
 
   root_block_device {
-    volume_size = 20
+    volume_size = 10
     volume_type = "gp2"
   }
 
-  dynamic "ebs_block_device" {
-    for_each = [
-      {
-        device_name = "/dev/sdf"
-        volume_size = 5
-        volume_type = "gp2"
-      }
-    ]
-    content {
-      device_name = ebs_block_device.value.device_name
-      volume_size = ebs_block_device.value.volume_size
-      volume_type = ebs_block_device.value.volume_type
-    }
-  }
 
   tags = merge(
     local.common_tags,
@@ -204,24 +176,10 @@ resource "aws_instance" "t1_tnode_instance_3" {
   key_name               = "ansible-training-1-sshkey"
 
   root_block_device {
-    volume_size = 20
+    volume_size = 10
     volume_type = "gp2"
   }
 
-  dynamic "ebs_block_device" {
-    for_each = [
-      {
-        device_name = "/dev/sdf"
-        volume_size = 5
-        volume_type = "gp2"
-      }
-    ]
-    content {
-      device_name = ebs_block_device.value.device_name
-      volume_size = ebs_block_device.value.volume_size
-      volume_type = ebs_block_device.value.volume_type
-    }
-  }
 
   tags = merge(
     local.common_tags,
