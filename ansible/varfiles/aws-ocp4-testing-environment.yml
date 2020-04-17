@@ -1,0 +1,60 @@
+env_spec: ../varfiles/aws-ocp4-testing-environment.yml
+dest_dir: ../generated/aws-ocp4-testing-environment
+
+terraform_roles_dir: ../../../../../automation-incubator/terraform
+terraform_template: aws-infra-main.tf.j2
+terraform_variables: aws-infra-variables.tf.j2
+terraform_outputs: aws-infra-outputs.tf.j2
+terraform_out_vars:  terraform_exposed_vars.yml.tpl.j2
+
+key_path: "{{ ansible_env.HOME }}/.ssh/openshift-training-id_ssh_rsa"
+
+infra_create_cloud: false
+infra_security_groups: '"sg-0268ce964a906ea5d", "sg-04feddf60c969a995"'
+infra_vpc_id: '"vpc-07e7d2553a8cf4117"'
+infra_instance_profile_id: "ocp4test-v5tj6-bootstrap-profile"
+
+infra_cloudprovider_kind: 'aws'
+infra_name: 'ocp4-testing-1'
+infra_description: 'Openshift 4 Test Env'
+infra_domain: 'openshift.local'
+infra_region: 'eu-west-2'
+use_aws_dns: false
+
+cloud_cidr: "10.0.0.0/16"
+
+images: [
+  { name: 'rhel_7_7', filter: 'RHEL-7.7*', account: '309956199498' },
+  { name: 'centos_7', filter: 'CentOS7*', account: '679593333241' }
+]
+
+root_block_device: {
+  size: "10",
+  type: "gp2"
+}
+
+machine_types: {
+  access_node: {
+    type: "t2.micro",
+    block_devices: [],
+    image: 'rhel_7_7',
+    external_ip: true
+  }
+}
+
+envs: [
+  { prefix: 'o1', subnet_cidr: "10.0.0.0/16", availability_zone: '{{ infra_region }}a',
+    subnet_name: 'o1-default-public-subnet', subnet_id: 'subnet-02b3ba54a444329ba', name: "Ansible Training 1 env",
+    node_groups: [
+      { name: 'anode', machine_type: 'access_node', count: 1 }
+    ]
+  }
+]
+
+network_rules: [
+  { name: 'internal_traffic', description: 'Open network within env', ingres_rules: [{}], egres_rules: [{}] }
+]
+
+security_groups: [
+  { env: 'o1', name: 'o1_security_group', description: 'Network rules for o1 env', network_rule_refs: ['internal_traffic'] }
+]

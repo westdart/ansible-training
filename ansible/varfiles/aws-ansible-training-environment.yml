@@ -1,7 +1,7 @@
 env_spec: ../varfiles/aws-ansible-training-environment.yml
 dest_dir: ../generated/aws-ansible-training-environment
 
-terraform_roles_dir: ../../../../../automation-incubator/terraform
+terraform_roles_dir: ../../terraform
 terraform_template: aws-infra-main.tf.j2
 terraform_variables: aws-infra-variables.tf.j2
 terraform_outputs: aws-infra-outputs.tf.j2
@@ -9,6 +9,7 @@ terraform_out_vars:  terraform_exposed_vars.yml.tpl.j2
 
 key_path: "{{ ansible_env.HOME }}/.ssh/ansible-training-id_rsa"
 
+infra_create_cloud: true
 infra_cloudprovider_kind: 'aws'
 infra_name: 'ansible-training-1'
 infra_description: 'Ansible Training Env'
