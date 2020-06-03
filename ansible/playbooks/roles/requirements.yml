@@ -1,0 +1,11 @@
+- src: https://github.com/westdart/ar_inv_hostname.git
+  version: v0.2
+  scm: git
+
+- src: https://github.com/westdart/ar_aws_infra.git
+  version: v0.2
+  scm: git
+
+- src: https://github.com/westdart/ar_ssh_config
+  version: v0.1
+  scm: git
