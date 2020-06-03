@@ -19,6 +19,8 @@ use_aws_dns: false
 
 cloud_cidr: "10.0.0.0/16"
 
+public_host_user: ec2-user
+
 images: [
   { name: 'rhel_7_7', filter: 'RHEL-7.7*', account: '309956199498' },
   { name: 'centos_7', filter: 'CentOS7*', account: '679593333241' }
