@@ -31,5 +31,5 @@
         verbosity: 1
         msg: "{{ attachable_machines_result.stdout | from_json | json_query(\"InstanceStatuses[?SystemStatus.Status!='ok'].InstanceId\") }}"
 
-- name: "Generate hosts file"
-  import_playbook: gen-hosts.yml
+- name: "Update ansible inventory"
+  import_playbook: gen-ansible-inventory.yml

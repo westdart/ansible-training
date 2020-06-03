@@ -1,14 +1,4 @@
 ---
-#
-# Generate the ansible inventory at <dest-dir>/inventory/hosts
-# For the ansible inventory, server hostnames are processed using a '-' delimiter and associated groups are defined, e.g
-# dc1-os-node-1 would result in the following groups:
-#   - dc1             Contains all hosts with 'dc1'
-#   - dc1_os          Contains all hosts with 'dc1-os'
-#   - dc1_os_node     Contains all hosts with 'dc1-os-node'
-#   - dc1_os_node_1   Contains only the host 'dc1-os-node-1'
-#
-
 - hosts: localhost
   become: no
 
@@ -19,36 +9,25 @@
     - debug:
         msg: "Entering gen-ansible-inventory.yml"
 
-    - ec2_instance_facts:
-        filters:
-          "tag:InfraName": "{{ infra_name }}"
-          instance-state-name: [ "running", "shutting-down", "stopping", "stopped" ]
-      register: ec2_instances
+    - name: Get inventory details
+      include_role:
+        name: ar_aws_infra
+        tasks_from: get-inventory
+      vars:
+        ar_aws_infra_dest_dir: "{{ dest_dir }}"
 
-    - name: Ensure generated dirs exist
-      file:
-        dest: "{{ dest_dir }}/inventory/group_vars"
-        state: directory
+    - name: Ensure ssh client config present
+      include_role:
+        name: ar_ssh_config
+      vars:
+        ar_ssh_config_name: "{{ infra_name }}"
+        ar_ssh_config_machines: "{{ ar_aws_infra_all_machines }}"
+        ar_ssh_config_public_user: "{{ public_host_user }}"
 
-    - name: "create inventory file"
-      copy:
-        content: "{{ ec2_instances | json_query('instances[*].tags.Name') | os_ansible_inventory }}"
-        dest: "{{ dest_dir }}/inventory/hosts"
+    - name: Create ansible inventory
+      include_role:
+        name: ar_inv_hostname
+      vars:
+        ar_inv_hostname_dest_dir: "{{ dest_dir }}/inventory"
+        ar_inv_hostname_machines: "{{ ar_aws_infra_all_machines }}"
 
-    - name: "create ansible global vars"
-      template:
-        src: ../templates/os-ansible-globals.j2
-        dest: "{{ dest_dir }}/inventory/group_vars/all"
-
-    - name: Refresh inventory to ensure seed hosts changes picked up
-      meta: refresh_inventory
-
-    - name: Clear facts to ensure seed hosts changes picked up
-      meta: clear_facts
-
-    - name: reload facts
-      setup:
-
-    - name: Load new group_vars
-      include_vars:
-        file: "{{ dest_dir }}/inventory/group_vars/all"
