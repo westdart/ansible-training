@@ -1,0 +1,1 @@
+ssh-public-key-file = "/home/seldn/.ssh/ansible-training-id_rsa.pub"
