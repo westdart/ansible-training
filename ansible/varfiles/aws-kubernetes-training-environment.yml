@@ -43,7 +43,7 @@ envs: [
   { prefix: 'k1', subnet_cidr: "10.0.1.0/24", availability_zone: '{{ infra_region }}a',
     subnet_name: 'k1-default-public-subnet', name: "Ansible Training 1 env",
     node_groups: [
-      { name: 'kubernetes_node', machine_type: 'kube_node', count: 2 }
+      { name: 'kube', machine_type: 'kube_node', count: 2 }
     ]
   }
 ]

@@ -5,9 +5,9 @@ output "vpc" {
 output "vpc_id" {
   value = local.vpc_id
 }
-output "machine_k1-kubernetes_node1_localdomain" {
-  value = aws_instance.k1_kubernetes_node_instance_1
+output "machine_k1-kube1_localdomain" {
+  value = aws_instance.k1_kube_instance_1
 }
-output "machine_k1-kubernetes_node2_localdomain" {
-  value = aws_instance.k1_kubernetes_node_instance_2
+output "machine_k1-kube2_localdomain" {
+  value = aws_instance.k1_kube_instance_2
 }
