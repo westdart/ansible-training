@@ -428,7 +428,7 @@ data "aws_ami" "centos_7_aws_ami" {
 
 # Create all environment nodes
 
-resource "aws_instance" "k1_kubernetes_node_instance_1" {
+resource "aws_instance" "k1_kube_instance_1" {
   ami                    = data.aws_ami.rhel_7_7_aws_ami.id
   instance_type          = "t2.micro"
   iam_instance_profile   = aws_iam_instance_profile.sts-instance-profile.id
@@ -446,13 +446,13 @@ resource "aws_instance" "k1_kubernetes_node_instance_1" {
   tags = merge(
     local.common_tags,
     map(
-      "Name", "k1-kubernetes_node1.localdomain"
+      "Name", "k1-kube1.localdomain"
     )
   )
 }
 
 
-resource "aws_instance" "k1_kubernetes_node_instance_2" {
+resource "aws_instance" "k1_kube_instance_2" {
   ami                    = data.aws_ami.rhel_7_7_aws_ami.id
   instance_type          = "t2.micro"
   iam_instance_profile   = aws_iam_instance_profile.sts-instance-profile.id
@@ -470,7 +470,7 @@ resource "aws_instance" "k1_kubernetes_node_instance_2" {
   tags = merge(
     local.common_tags,
     map(
-      "Name", "k1-kubernetes_node2.localdomain"
+      "Name", "k1-kube2.localdomain"
     )
   )
 }
