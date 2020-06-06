@@ -2,10 +2,9 @@ env_spec: ../varfiles/aws-ansible-training-environment.yml
 dest_dir: ../generated/aws-ansible-training-environment
 
 terraform_roles_dir: ../../terraform
-terraform_template: aws-infra-main.tf.j2
-terraform_variables: aws-infra-variables.tf.j2
-terraform_outputs: aws-infra-outputs.tf.j2
-terraform_out_vars:  terraform_exposed_vars.yml.tpl.j2
+terraform_template: lab-main.tf.j2
+terraform_variables: lab-variables.tf.j2
+terraform_outputs: lab-outputs.tf.j2
 
 key_path: "{{ ansible_env.HOME }}/.ssh/ansible-training-id_rsa"
 

@@ -2,12 +2,16 @@ env_spec: ../varfiles/aws-kubernetes-training-environment.yml
 dest_dir: ../generated/aws-kubernetes-training-environment
 
 terraform_roles_dir: ../../terraform
-terraform_template: aws-infra-main.tf.j2
-terraform_variables: aws-infra-variables.tf.j2
-terraform_outputs: aws-infra-outputs.tf.j2
-terraform_out_vars:  terraform_exposed_vars.yml.tpl.j2
 
-key_path: "{{ ansible_env.HOME }}/.ssh/ansible-training-id_rsa"
+ar_aws_infra_terraform_template: turtle-main.tf.j2
+ar_aws_infra_terraform_variables: turtle-variables.tf.j2
+ar_aws_infra_terraform_outputs: turtle-outputs.tf.j2
+ar_aws_infra_ami_images: [
+  { name: 'rhel_7_8', filter: 'RHEL-7.8*', account: '309956199498' },
+  { name: 'rhel_8_2', filter: 'RHEL-8.2*', account: '309956199498' }
+]
+
+key_path: "{{ ansible_env.HOME }}/.ssh/kubernetes-training-id_rsa"
 
 infra_create_cloud: true
 infra_cloudprovider_kind: 'aws'
@@ -16,14 +20,7 @@ infra_description: 'Kubernetes Training Env'
 infra_domain: 'localdomain'
 infra_region: 'eu-west-2'
 use_aws_dns: false
-
-cloud_cidr: "10.0.0.0/16"
-
 public_host_user: ec2-user
-
-images: [
-  { name: 'rhel_7_7', filter: 'RHEL-7.7*', account: '309956199498' }
-]
 
 root_block_device: {
   size: "10",
@@ -34,24 +31,107 @@ machine_types: {
   kube_node: {
     type: "t2.micro",
     block_devices: [],
-    image: 'rhel_7_7',
+    image: 'rhel_7_8',
     external_ip: false
   }
 }
 
-envs: [
-  { prefix: 'k1', subnet_cidr: "10.0.1.0/24", availability_zone: '{{ infra_region }}a',
-    subnet_name: 'k1-default-public-subnet', name: "Ansible Training 1 env",
-    node_groups: [
-      { name: 'kube', machine_type: 'kube_node', count: 2 }
-    ]
+cloud_cidr: "10.0.0.0/16"
+
+subnets: [
+  {
+    subnet_name: 'k1-public-subnet',
+    subnet_cidr: "10.0.1.0/24",
+    availability_zone: '{{ infra_region }}a',
+    description: "Ansible Training 1 env",
+    public_ip_alloc: true
+  },
+  {
+    subnet_name: 'k1-private-subnet',
+    subnet_cidr: "10.0.2.0/24",
+    subnet_type: "Private",
+    availability_zone: '{{ infra_region }}a',
+    description: "Ansible Training 1 env",
+    nat: true
   }
 ]
 
 network_rules: [
-  { name: 'internal_traffic', description: 'Open network within env', ingres_rules: [{}], egres_rules: [{}] }
+  { name: 'all_traffic', description: 'All inward and outward traffic',
+      ingress_rules: [{}],
+      egress_rules: [{}]
+  },
+  { name: 'ssh_traffic', description: 'Allow SSH inward traffic',
+      ingress_rules: [
+        {from_port: '22',  to_port: '22',  cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Server maintenance'}
+      ],
+      egress_rules: []
+  },
+  { name: 'web_traffic', description: 'Allow usual web inward traffic',
+      ingress_rules: [
+        {from_port: '80',  to_port: '80',  cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Default web access'},
+        {from_port: '443', to_port: '443', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Default secure web access'}
+      ],
+      egress_rules: []
+  },
+  { name: 'egress_web_traffic', description: 'Enable access to external web services',
+      ingress_rules: [],
+      egress_rules: [
+        {from_port: '80',  to_port: '80',  cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Default web services'},
+        {from_port: '443', to_port: '443', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Default secure web services'}
+      ]
+  },
+  { name: 'control-plane', description: 'Kube Control Plane Rules',
+      ingress_rules: [
+        {from_port: '6443',  to_port: '6443',  cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Kubernetes API server'},
+        {from_port: '2379',  to_port: '2380',  cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'etcd server client API'},
+        {from_port: '10250', to_port: '10250', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Kubelet API'},
+        {from_port: '10251', to_port: '10251', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'kube-scheduler'},
+        {from_port: '10252', to_port: '10252', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'kube-controller-manager'}
+      ],
+      egress_rules: []
+  },
+  { name: 'worker-node', description: 'Kube Worker Node Rules',
+      ingress_rules: [
+        {from_port: '10250', to_port: '10250', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'Kubelet API'},
+        {from_port: '30000', to_port: '32767', cidr_blocks: ["0.0.0.0/0"], protocol: 'tcp', purpose: 'NodePort Services'}
+      ],
+      egress_rules: []
+  }
 ]
 
 security_groups: [
-  { env: 'k1', name: 'k1_security_group', description: 'Network rules for k1 env', network_rule_refs: ['internal_traffic'] }
+  {
+    name: 'default_group',
+    description: 'Default rules for k1 env',
+    network_rule_refs: ['ssh_traffic', 'web_traffic', 'egress_web_traffic']
+  },
+  {
+    name: 'control_group',
+    description: 'Kube Control Group',
+    network_rule_refs: ['control-plane']
+  },
+  {
+    name: 'worker_group',
+    description: 'Kube Worker Group',
+    network_rule_refs: ['worker-node']
+  },
 ]
+
+node_groups: [
+  {
+    node_group_name: 'kubectrl',
+    machine_type: 'kube_node',
+    count: 1,
+    subnet_name: 'k1-public-subnet',
+    security_groups: ['default_group', 'control_group']
+  },
+  {
+    node_group_name: 'kubework',
+    machine_type: 'kube_node',
+    count: 1,
+    subnet_name: 'k1-private-subnet',
+    security_groups: ['default_group', 'worker_group']
+  }
+]
+

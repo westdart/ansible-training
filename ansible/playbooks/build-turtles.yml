@@ -1,0 +1,33 @@
+---
+- hosts: localhost
+  become: no
+
+  vars_files:
+    - "{{ env_spec }}"
+
+  tasks:
+    - name: Create ssh key to use for all machines
+      include_role:
+        name: ar_ssh_keypair
+      vars:
+        ar_ssh_keypair_filepath: "{{ key_path }}"
+
+    - name: Generate the Environment
+      include_role:
+        name: ar_aws_infra
+        tasks_from: genterra-main
+      vars:
+        ar_aws_infra_dest_dir: "{{ dest_dir }}"
+        ar_aws_infra_key_path: "{{ key_path }}"
+        ar_aws_infra_name: "{{ infra_name }}"
+        ar_aws_infra_description: "{{ infra_name }}"
+        ar_aws_infra_domain: "{{ infra_domain }}"
+        ar_aws_infra_region: "{{ infra_region }}"
+        ar_aws_infra_subnets: "{{ subnets }}"
+        ar_aws_infra_network_rules: "{{ network_rules }}"
+        ar_aws_infra_security_groups: "{{ security_groups }}"
+        ar_aws_infra_node_groups: "{{ node_groups }}"
+        ar_aws_infra_machine_types: "{{ machine_types }}"
+
+#- import_playbook: gen-ansible-inventory.yml
+#- import_playbook: rhel-subscribe.yml

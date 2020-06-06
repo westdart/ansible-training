@@ -1,1 +1,1 @@
-ssh-public-key-file = "/home/davids/.ssh/ansible-training-id_rsa.pub"
+ssh-public-key-file = "/home/davids/.ssh/kubernetes-training-id_rsa.pub"

@@ -25,416 +25,264 @@ resource "aws_key_pair" "keypair" {
   public_key = file(var.ssh-public-key-file)
 }
 
+# Setup IAM objects
+module "aws-iam" {
+  source      = "/home/davids/code/westdart/ansible_roles/ar_aws_infra/files/terraform/modules/aws-iam"
+  name        = "k1"
+  prefix      = "k1-"
+  common-tags = local.common_tags
+}
 
 # Create VPC and other cloud wide resources
-## Setup IAM objects
-resource "aws_iam_role" "sts-instance-role" {
-  name = "k1-sts-instance-role"
-
-  assume_role_policy = <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Action": "sts:AssumeRole",
-            "Principal": {
-                "Service": "ec2.amazonaws.com"
-            },
-            "Effect": "Allow",
-            "Sid": ""
-        }
-    ]
+module "aws-cloud2" {
+  source         = "/home/davids/code/westdart/ansible_roles/ar_aws_infra/files/terraform/modules/aws-cloud2"
+  cloud_cidr     = "10.0.0.0/16"
+  cloud_name     = "k1"
+  common-tags    = local.common_tags
 }
-EOF
-
-  tags = local.common_tags
-}
-
-//  This policy allows an instance to forward logs to CloudWatch, and
-//  create the Log Stream or Log Group if it doesn't exist.
-resource "aws_iam_policy" "application-policy-forward-logs" {
-  name        = "k1-instance-forward-logs"
-  path        = "/"
-  description = "Allows an instance to forward logs to CloudWatch"
-
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "logs:CreateLogGroup",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents",
-        "logs:DescribeLogStreams"
-      ],
-      "Resource": [
-        "arn:aws:logs:*:*:*"
-      ]
-    }
-  ]
-}
-EOF
-}
-
-//  Attach the policies to the roles.
-resource "aws_iam_policy_attachment" "application-attachment-forward-logs" {
-  name       = "k1-attachment-forward-logs"
-  roles      = [aws_iam_role.sts-instance-role.name]
-  policy_arn = aws_iam_policy.application-policy-forward-logs.arn
-}
-
-//  Create a instance profile for the role.
-resource "aws_iam_instance_profile" "sts-instance-profile" {
-  name  = "k1-sts-instance-profile"
-  role = "${aws_iam_role.sts-instance-role.name}"
-}
-
-//  Create a user and access key for application-only permissions
-resource "aws_iam_user" "application-aws-user" {
-  name = "k1-aws-user"
-  path = "/"
-
-  tags = local.common_tags
-}
-
-//  Policy taken from https://github.com/openshift/openshift-ansible-contrib/blob/9a6a546581983ee0236f621ae8984aa9dfea8b6e/reference-architecture/aws-ansible/playbooks/roles/cloudformation-infra/files/greenfield.json.j2#L844
-resource "aws_iam_user_policy" "application-aws-user" {
-  name = "k1-aws-user-policy"
-  user = aws_iam_user.application-aws-user.name
-
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ec2:DescribeVolume*",
-        "ec2:CreateVolume",
-        "ec2:CreateTags",
-        "ec2:DescribeInstance*",
-        "ec2:AttachVolume",
-        "ec2:DetachVolume",
-        "ec2:DeleteVolume",
-        "ec2:DescribeSubnets",
-        "ec2:CreateSecurityGroup",
-        "ec2:DescribeSecurityGroups",
-        "ec2:DescribeRouteTables",
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:RevokeSecurityGroupIngress",
-        "elasticloadbalancing:DescribeTags",
-        "elasticloadbalancing:CreateLoadBalancerListeners",
-        "elasticloadbalancing:ConfigureHealthCheck",
-        "elasticloadbalancing:DeleteLoadBalancerListeners",
-        "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
-        "elasticloadbalancing:DescribeLoadBalancers",
-        "elasticloadbalancing:CreateLoadBalancer",
-        "elasticloadbalancing:DeleteLoadBalancer",
-        "elasticloadbalancing:ModifyLoadBalancerAttributes",
-        "elasticloadbalancing:DescribeLoadBalancerAttributes"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-EOF
-}
-
-resource "aws_iam_access_key" "application-aws-user" {
-  user    = aws_iam_user.application-aws-user.name
-}
-
-## Create VPC
-resource "aws_vpc" "cloud" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  tags = merge(
-    local.common_tags,
-    map(
-      "Name", "k1"
-    )
-  )
-}
-
-locals {
-  vpc_id = aws_vpc.cloud.id
-}
-
-## Add Network resources
-// TODO: review - Create an Internet Gateway for the VPC.
-resource "aws_internet_gateway" "default_gateway" {
-  vpc_id = local.vpc_id
-  tags   = local.common_tags
-}
-
-// TODO: review - Create a route table allowing all addresses access to the IGW.
-resource "aws_route_table" "public_route" {
-  vpc_id = local.vpc_id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.default_gateway.id
-  }
-  tags = local.common_tags
-}
-
-## Add Security Groups
-// TODO - refactor all this into the 'custom' security groups - i.e. make it all data defined
-//  This security group allows intra-node communication on all ports with all
-//  protocols.
-//  Security group which allows SSH access to a host.
-resource "aws_security_group" "cloud-ssh" {
-  name        = "cloud-ssh"
-  description = "Security group that allows public ingress over SSH."
-  vpc_id      = local.vpc_id
-
-  //  SSH
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = local.common_tags
-}
-
-//  This security group allows public ingress to the instances for HTTP, HTTPS
-//  and common HTTP/S proxy ports.
-resource "aws_security_group" "web-public-ingress" {
-  name        = "web-public-ingress"
-  description = "Security group that allows public ingress to instances, HTTP, HTTPS and more."
-  vpc_id      = local.vpc_id
-
-  //  HTTP
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  //  HTTP Proxy
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  //  HTTPS
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  //  HTTPS Proxy
-  ingress {
-    from_port   = 8443
-    to_port     = 8443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = local.common_tags
-}
-
-//  This security group allows public egress from the instances for HTTP and
-//  HTTPS, which is needed for yum updates, git access etc etc.
-resource "aws_security_group" "web-public-egress" {
-  name        = "web-public-egress"
-  description = "Security group that allows egress to the internet for instances over HTTP and HTTPS."
-  vpc_id      = local.vpc_id
-
-  //  HTTP
-  egress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  //  HTTPS
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = local.common_tags
-}
-
 
 
  
-# Create environment subnets and route table associations
-resource "aws_subnet" "k1_public_subnet" {
+locals {
+  vpc_id = module.aws-cloud2.vpc-id
+}
+
+# Create subnets and route table associations
+resource "aws_subnet" "k1-public-subnet" {
   vpc_id                  = local.vpc_id
   cidr_block              = "10.0.1.0/24"
   availability_zone       = "eu-west-2a"
   map_public_ip_on_launch = true
-  depends_on              = ["aws_vpc.cloud"]
+  depends_on              = ["module.aws-cloud2"]
   tags = merge(
     local.common_tags,
     map(
-      "Name", "k1-default-public-subnet",
+      "Name", "k1-public-subnet",
       "Type", "Public",
       "infra_name", "k1"
     )
   )
 }
-resource "aws_route_table_association" "k1_public_subnet_asoc" {
-  subnet_id      = aws_subnet.k1_public_subnet.id
-  route_table_id = aws_route_table.public_route.id
+
+resource "aws_route_table_association" "k1-public-subnet_asoc" {
+  subnet_id      = aws_subnet.k1-public-subnet.id
+  route_table_id = module.aws-cloud2.public_route_id
 }
 
+ 
+resource "aws_subnet" "k1-private-subnet" {
+  vpc_id                  = local.vpc_id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "eu-west-2a"
+  depends_on              = ["module.aws-cloud2"]
+  tags = merge(
+    local.common_tags,
+    map(
+      "Name", "k1-private-subnet",
+      "Type", "Private",
+      "infra_name", "k1"
+    )
+  )
+}
 
+resource "aws_route_table_association" "k1-private-subnet_asoc" {
+  subnet_id      = aws_subnet.k1-private-subnet.id
+  route_table_id = module.aws-cloud2.public_route_id
+}
+
+resource "aws_eip" "k1-private-subnet_nat_gw_ip" {
+  vpc = true
+}
+
+resource "aws_nat_gateway" "k1-private-subnet_nat_gw" {
+  allocation_id = aws_eip.k1-private-subnet_nat_gw_ip.id
+  subnet_id     = aws_subnet.k1-private-subnet.id
+
+  tags = {
+    Name = "k1 - k1-private-subnet NAT GW"
+  }
+}
+ 
+ 
 
 # Create custom security groups
-resource "aws_security_group" "k1_security_group" {
-  name        = "k1_security_group"
-  description = "Network rules for k1 env"
+resource "aws_security_group" "default_group" {
+  name        = "default_group"
+  description = "Default rules for k1 env"
   vpc_id      = local.vpc_id
 
   ingress {
-    from_port = "0"
-    to_port   = "0"
-    protocol  = "-1"
-    self      = true
-    cidr_blocks = ["10.0.1.0/24"]
-  }
-
-  ingress {
-    from_port = "0"
+    from_port = "22"
     to_port   = "22"
     protocol  = "tcp"
     self      = true
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Server maintenance"
   }
 
+  ingress {
+    from_port = "80"
+    to_port   = "80"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Default web access"
+  }
+
+  ingress {
+    from_port = "443"
+    to_port   = "443"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Default secure web access"
+  }
+
+ 
+  egress {
+    from_port = "80"
+    to_port   = "80"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Default web services"
+  }
 
   egress {
-    from_port = "0"
-    to_port   = "0"
-    protocol  = "-1"
+    from_port = "443"
+    to_port   = "443"
+    protocol  = "tcp"
     self      = true
-    cidr_blocks = ["10.0.1.0/24"]
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Default secure web services"
   }
 
-  tags = merge(
+   tags = merge(
            local.common_tags,
            map(
-             "Name", "k1_security_group",
+             "Name", "default_group",
              "infra_name", "k1"
            )
          )
 }
 
+resource "aws_security_group" "control_group" {
+  name        = "control_group"
+  description = "Kube Control Group"
+  vpc_id      = local.vpc_id
 
-# Establish AMIs to use
-# Find the AMI by:
-# Account, Latest, x86_64, EBS, HVM, OS Name
-data "aws_ami" "rhel_7_7_aws_ami" {
-  most_recent = true
-
-  owners = ["309956199498"]
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
+  ingress {
+    from_port = "6443"
+    to_port   = "6443"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Kubernetes API server"
   }
 
-  filter {
-    name   = "root-device-type"
-    values = ["ebs"]
+  ingress {
+    from_port = "2379"
+    to_port   = "2380"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "etcd server client API"
   }
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
+  ingress {
+    from_port = "10250"
+    to_port   = "10250"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Kubelet API"
   }
 
-  filter {
-    name   = "name"
-    values = ["RHEL-7.7*"]
+  ingress {
+    from_port = "10251"
+    to_port   = "10251"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "kube-scheduler"
   }
+
+  ingress {
+    from_port = "10252"
+    to_port   = "10252"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "kube-controller-manager"
+  }
+
+ 
+   tags = merge(
+           local.common_tags,
+           map(
+             "Name", "control_group",
+             "infra_name", "k1"
+           )
+         )
 }
 
-# Establish AMIs to use
-# Find the AMI by:
-# Account, Latest, x86_64, EBS, HVM, OS Name
-data "aws_ami" "rhel_8_2_aws_ami" {
-  most_recent = true
+resource "aws_security_group" "worker_group" {
+  name        = "worker_group"
+  description = "Kube Worker Group"
+  vpc_id      = local.vpc_id
 
-  owners = ["309956199498"]
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
+  ingress {
+    from_port = "10250"
+    to_port   = "10250"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Kubelet API"
   }
 
-  filter {
-    name   = "root-device-type"
-    values = ["ebs"]
+  ingress {
+    from_port = "30000"
+    to_port   = "32767"
+    protocol  = "tcp"
+    self      = true
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "NodePort Services"
   }
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "name"
-    values = ["RHEL-8.2*"]
-  }
+ 
+   tags = merge(
+           local.common_tags,
+           map(
+             "Name", "worker_group",
+             "infra_name", "k1"
+           )
+         )
 }
 
+ 
 # Establish AMIs to use
-# Find the AMI by:
-# Account, Latest, x86_64, EBS, HVM, OS Name
-data "aws_ami" "centos_7_aws_ami" {
-  most_recent = true
-
-  owners = ["679593333241"]
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-
-  filter {
-    name   = "root-device-type"
-    values = ["ebs"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "name"
-    values = ["CentOS7*"]
-  }
+module "rhel_7_8-images" {
+  source      = "/home/davids/code/westdart/ansible_roles/ar_aws_infra/files/terraform/modules/aws-images"
+  account_num = "309956199498"
+  os_name = "RHEL-7.8*"
 }
+# Establish AMIs to use
+module "rhel_8_2-images" {
+  source      = "/home/davids/code/westdart/ansible_roles/ar_aws_infra/files/terraform/modules/aws-images"
+  account_num = "309956199498"
+  os_name = "RHEL-8.2*"
+}
+ 
 
 
+# Create all nodes
 
-
-# Create all environment nodes
-
-resource "aws_instance" "k1_kube_instance_1" {
-  ami                    = data.aws_ami.rhel_7_7_aws_ami.id
+resource "aws_instance" "k1_kubectrl_instance_1" {
+  ami                    = module.rhel_7_8-images.ami_id
   instance_type          = "t2.micro"
-  iam_instance_profile   = aws_iam_instance_profile.sts-instance-profile.id
-  subnet_id              = aws_subnet.k1_public_subnet.id
-  vpc_security_group_ids = [aws_security_group.cloud-ssh.id,aws_security_group.web-public-ingress.id,aws_security_group.web-public-egress.id,
-                            aws_security_group.k1_security_group.id]
+  iam_instance_profile   = module.aws-iam.sts-instance-profile-id
+  subnet_id              = aws_subnet.k1-public-subnet.id
+  vpc_security_group_ids = [aws_security_group.default_group.id,aws_security_group.control_group.id]
   key_name               = "k1-sshkey"
 
   root_block_device {
@@ -446,19 +294,20 @@ resource "aws_instance" "k1_kube_instance_1" {
   tags = merge(
     local.common_tags,
     map(
-      "Name", "k1-kube1.localdomain"
+      "Name", "kubectrl.localdomain"
     )
   )
 }
 
 
-resource "aws_instance" "k1_kube_instance_2" {
-  ami                    = data.aws_ami.rhel_7_7_aws_ami.id
+ 
+
+resource "aws_instance" "k1_kubework_instance_1" {
+  ami                    = module.rhel_7_8-images.ami_id
   instance_type          = "t2.micro"
-  iam_instance_profile   = aws_iam_instance_profile.sts-instance-profile.id
-  subnet_id              = aws_subnet.k1_public_subnet.id
-  vpc_security_group_ids = [aws_security_group.cloud-ssh.id,aws_security_group.web-public-ingress.id,aws_security_group.web-public-egress.id,
-                            aws_security_group.k1_security_group.id]
+  iam_instance_profile   = module.aws-iam.sts-instance-profile-id
+  subnet_id              = aws_subnet.k1-private-subnet.id
+  vpc_security_group_ids = [aws_security_group.default_group.id,aws_security_group.worker_group.id]
   key_name               = "k1-sshkey"
 
   root_block_device {
@@ -470,11 +319,11 @@ resource "aws_instance" "k1_kube_instance_2" {
   tags = merge(
     local.common_tags,
     map(
-      "Name", "k1-kube2.localdomain"
+      "Name", "kubework.localdomain"
     )
   )
 }
 
 
-
-
+ 
+ 

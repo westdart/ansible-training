@@ -1,14 +1,14 @@
 [t1_tnode3]
-t1-tnode3.at.local ansible_host=3.10.221.29
+t1-tnode3.at.local ansible_host=18.130.211.126
 
 [t1]
-t1-tnode3.at.local ansible_host=3.10.221.29
-t1-tnode2.at.local ansible_host=3.8.146.237
-t1-tnode1.at.local ansible_host=3.8.3.123
+t1-tnode3.at.local ansible_host=18.130.211.126
+t1-tnode2.at.local ansible_host=52.56.138.110
+t1-tnode1.at.local ansible_host=52.56.243.29
 
 [t1_tnode2]
-t1-tnode2.at.local ansible_host=3.8.146.237
+t1-tnode2.at.local ansible_host=52.56.138.110
 
 [t1_tnode1]
-t1-tnode1.at.local ansible_host=3.8.3.123
+t1-tnode1.at.local ansible_host=52.56.243.29
 
